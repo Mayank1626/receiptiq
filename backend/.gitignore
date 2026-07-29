@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pyc
+.env
+receiptiq.db
+.pytest_cache/
+.coverage
+alembic/versions/*.py

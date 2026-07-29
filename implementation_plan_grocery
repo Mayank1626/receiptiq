@@ -1,0 +1,577 @@
+# GroceryHub Sprint 1 — Revised Architecture Plan (v2)
+
+> This is a ground-up revision of the Sprint 1 architecture. Every change from v1 is documented with rationale. Self-critiques of previous design decisions are called out explicitly.
+
+---
+
+## 1. Critical Self-Review of v1 Architecture
+
+Before presenting the updated design, here are the flaws I identified in my own previous proposal:
+
+| v1 Decision | Problem | v2 Fix |
+|:---|:---|:---|
+| Named models `Order` / `OrderItem` | Tightly couples the domain to "grocery orders." Breaks when receipts come from pharmacies, fuel stations, restaurants, or utilities. | Renamed to `Receipt` / `ReceiptItem` — a universal purchase abstraction. |
+| Upload endpoint returned a file path and implicitly assumed receipt creation would follow | Couples file upload to receipt lifecycle. In reality, upload → AI parse → user preview → save is a multi-step pipeline. | Upload endpoint is **fire-and-forget**: saves file, returns file metadata. No Receipt is created. |
+| Single flat `uploads/` directory | A single directory with millions of files causes filesystem performance degradation (inode exhaustion, slow `ls`, slow lookups on ext4/NTFS). | Date-partitioned structure: `uploads/2026/07/uuid.pdf`. |
+| No `status` field on Receipt | Cannot track receipt lifecycle (uploaded → processing → processed → failed). Critical for async AI pipelines. | Added `status` enum field with defined state machine. |
+| No `store_type` field | Cannot categorize or filter by purchase category. Limits future analytics. | Added `store_type` enum. |
+| No `currency` field | Assumes single currency. Breaks for international users or multi-currency households. | Added `currency` field (default `INR`). |
+| No `raw_ai_response` field | Nowhere to store the raw Gemini API output for debugging, auditing, or re-parsing. | Added `raw_ai_response` JSON column. |
+| No `metadata` JSON field | No extensibility mechanism for future fields without schema migrations. | Added `metadata` JSON column. |
+| No `storage_provider` field | When migrating from local disk to S3/GCS, existing records lose track of where their files live. | Added `storage_provider` field (`LOCAL` for Sprint 1). |
+| `StorageService` naming | Too generic. Collides conceptually with database storage or cloud storage configuration. | Renamed to `FileStorageService` — explicitly about file I/O. |
+
+---
+
+## 2. Updated System Architecture
+
+```mermaid
+graph TB
+    subgraph "HTTP Layer"
+        A["FastAPI Router<br/>/api/v1/*"]
+    end
+
+    subgraph "Dependency Injection"
+        D["deps.py<br/>get_db(), get_file_storage()"]
+    end
+
+    subgraph "Service Layer"
+        S1["ReceiptService"]
+        S2["FileStorageService"]
+        S3["GeminiService ⬜"]
+        S4["ReceiptParserService ⬜"]
+        S5["AnalyticsService ⬜"]
+        S6["NotificationService ⬜"]
+    end
+
+    subgraph "Data Layer"
+        M1["Receipt Model"]
+        M2["ReceiptItem Model"]
+        DB["SQLite + aiosqlite<br/>WAL Mode, FK ON"]
+    end
+
+    subgraph "Storage Layer"
+        FS["Local Filesystem<br/>uploads/YYYY/MM/uuid.ext"]
+        CS["Cloud Storage ⬜"]
+    end
+
+    A --> D
+    D --> S1
+    D --> S2
+    S1 --> M1
+    S1 --> M2
+    M1 --> DB
+    M2 --> DB
+    S2 --> FS
+    S2 -.-> CS
+
+    style S3 stroke-dasharray: 5 5,color:#999
+    style S4 stroke-dasharray: 5 5,color:#999
+    style S5 stroke-dasharray: 5 5,color:#999
+    style S6 stroke-dasharray: 5 5,color:#999
+    style CS stroke-dasharray: 5 5,color:#999
+```
+
+> ⬜ = Planned for future sprints. Not implemented in Sprint 1.
+
+### Architectural Layers (Clean Architecture)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Transport Layer (HTTP)                                         │
+│  app/api/v1/endpoints/ — Route handlers, request parsing,       │
+│  response formatting, HTTP status codes                         │
+├─────────────────────────────────────────────────────────────────┤
+│  Application Layer (Use Cases / Services)                       │
+│  app/services/ — Business logic, orchestration, validation      │
+│  ReceiptService, FileStorageService                             │
+├─────────────────────────────────────────────────────────────────┤
+│  Domain Layer (Entities)                                        │
+│  app/models/ — SQLAlchemy ORM models (Receipt, ReceiptItem)     │
+│  app/schemas/ — Pydantic v2 DTOs (Create, Read, Response)       │
+├─────────────────────────────────────────────────────────────────┤
+│  Infrastructure Layer                                           │
+│  app/database/ — Async engine, sessions, migrations             │
+│  app/core/ — Config, logging, exception handling                │
+│  app/utils/ — File validation, path helpers                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Why Clean Architecture?** Each layer depends only on layers below it. The Transport Layer never touches SQLAlchemy directly. The Service Layer never imports FastAPI types. This makes it possible to:
+- Swap FastAPI for gRPC without touching services.
+- Swap SQLite for PostgreSQL without touching routes.
+- Add background workers (Celery/ARQ) that call the same services without HTTP.
+
+---
+
+## 3. Updated Directory Structure
+
+```
+backend/
+├── app/
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── deps.py                    # Dependency injection (get_db, get_file_storage)
+│   │   └── v1/
+│   │       ├── __init__.py
+│   │       ├── router.py              # Aggregates all v1 endpoint routers
+│   │       └── endpoints/
+│   │           ├── __init__.py
+│   │           ├── health.py          # GET /health — liveness + readiness
+│   │           ├── receipts.py        # CRUD for receipts
+│   │           └── upload.py          # File upload (decoupled from receipts)
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── config.py                  # Pydantic Settings — validates .env at startup
+│   │   ├── enums.py                   # StoreType, ReceiptStatus, StorageProvider, Currency
+│   │   ├── exceptions.py             # Domain exceptions (ReceiptNotFound, InvalidFileType, etc.)
+│   │   ├── exception_handlers.py     # Global FastAPI exception → JSON response mapping
+│   │   └── logging.py                # Structured logging configuration
+│   ├── database/
+│   │   ├── __init__.py
+│   │   ├── base.py                    # Imports all models for Alembic metadata discovery
+│   │   ├── base_class.py             # Declarative Base + TimestampMixin
+│   │   └── session.py                # Async engine factory, session maker, SQLite PRAGMAs
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── receipt.py                 # Receipt ORM model
+│   │   └── receipt_item.py           # ReceiptItem ORM model
+│   ├── schemas/
+│   │   ├── __init__.py
+│   │   ├── common.py                  # Generic API response envelope
+│   │   ├── receipt.py                 # Receipt DTOs (Create, Update, Read, List)
+│   │   ├── receipt_item.py           # ReceiptItem DTOs
+│   │   └── upload.py                 # Upload response DTO
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── receipt_service.py        # Receipt CRUD business logic
+│   │   └── file_storage_service.py   # File save/retrieve/delete (local disk for Sprint 1)
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   └── file_validation.py        # MIME check, size check, extension whitelist
+│   ├── uploads/                       # Date-partitioned file storage root
+│   │   └── .gitkeep
+│   └── main.py                        # FastAPI app factory, middleware, lifespan
+├── alembic/
+│   ├── env.py                         # Async Alembic migration runner
+│   ├── script.py.mako                # Migration template
+│   └── versions/                      # Auto-generated migration scripts
+├── tests/                             # Test directory (structure only for Sprint 1)
+│   └── __init__.py
+├── .env.example                       # Environment variable template
+├── .gitignore                         # Python, uploads, IDE, cache exclusions
+├── alembic.ini                        # Alembic configuration
+├── README.md                          # Setup, architecture, API docs
+└── requirements.txt                   # Pinned production dependencies
+```
+
+### New/Changed Folders Explained
+
+| Path | What Changed | Why |
+|:---|:---|:---|
+| `app/core/enums.py` | **New file** | Centralizes all Python `Enum` definitions (`StoreType`, `ReceiptStatus`, `StorageProvider`, `Currency`). Prevents magic strings scattered across the codebase. Enums are the source of truth for both SQLAlchemy columns and Pydantic schema validation. |
+| `app/database/base_class.py` | **Enhanced** | Now includes a `TimestampMixin` providing `created_at` and `updated_at` columns. Every model inherits this mixin, eliminating duplication and ensuring consistent timestamp behavior. |
+| `app/models/receipt.py` | **Renamed** from `order.py` | Reflects the universal `Receipt` domain entity. |
+| `app/models/receipt_item.py` | **Renamed** from `order_item.py` | Reflects `ReceiptItem` entity. |
+| `app/services/file_storage_service.py` | **Renamed** from `storage_service.py` | Explicit naming prevents ambiguity with database or cloud storage concepts. |
+| `app/services/receipt_service.py` | **Renamed** from `order_service.py` | Matches renamed domain model. |
+| `tests/` | **New directory** | Placeholder for test structure. Not populated in Sprint 1, but the directory exists to establish the convention. |
+
+---
+
+## 4. Updated Database Schema
+
+### 4.1 `receipts` Table
+
+| Column | Type | Constraints | Description |
+|:---|:---|:---|:---|
+| `id` | `UUID` (String 36) | **PK**, indexed | UUIDv4 generated server-side via `uuid.uuid4()` |
+| `store_name` | `String(150)` | **NOT NULL**, indexed | Store name (e.g., "Blinkit", "Apollo Pharmacy") |
+| `store_type` | `String(50)` | **NOT NULL**, default `INSTANT_GROCERY` | Enum: `INSTANT_GROCERY`, `SUPERMARKET`, `PHARMACY`, `RESTAURANT`, `ECOMMERCE`, `FUEL`, `UTILITY`, `OTHER` |
+| `receipt_date` | `DateTime(timezone=True)` | **NOT NULL**, indexed | Date/time of the purchase |
+| `total_amount` | `Numeric(12, 2)` | **NOT NULL** | Total receipt amount |
+| `delivery_charge` | `Numeric(10, 2)` | Default `0.00` | Delivery/shipping charge |
+| `tax` | `Numeric(10, 2)` | Default `0.00` | Tax amount |
+| `currency` | `String(3)` | **NOT NULL**, default `INR` | ISO 4217 currency code |
+| `storage_provider` | `String(20)` | Default `LOCAL` | Where the file is stored: `LOCAL`, `S3`, `GCS` |
+| `storage_path` | `String(500)` | Nullable | Relative path to the uploaded invoice file |
+| `status` | `String(20)` | **NOT NULL**, default `UPLOADED`, indexed | Receipt lifecycle: `UPLOADED` → `PROCESSING` → `PROCESSED` → `FAILED` |
+| `raw_ai_response` | `JSON` | Nullable | Raw Gemini API output for audit/debugging/re-parsing |
+| `metadata` | `JSON` | Nullable, default `{}` | Extensible key-value store for future fields without migrations |
+| `created_at` | `DateTime(timezone=True)` | Server default `func.now()` | Immutable creation timestamp |
+| `updated_at` | `DateTime(timezone=True)` | Server default `func.now()`, `onupdate=func.now()` | Last modification timestamp |
+
+### 4.2 `receipt_items` Table
+
+| Column | Type | Constraints | Description |
+|:---|:---|:---|:---|
+| `id` | `UUID` (String 36) | **PK**, indexed | UUIDv4 |
+| `receipt_id` | `UUID` (String 36) | **FK → receipts.id**, **NOT NULL**, indexed, `ON DELETE CASCADE` | Parent receipt reference |
+| `item_name` | `String(255)` | **NOT NULL** | Purchased item name |
+| `quantity` | `Numeric(10, 3)` | **NOT NULL**, default `1.000` | Quantity (supports fractional: 0.5 kg) |
+| `unit` | `String(50)` | Nullable | Unit of measure: `kg`, `g`, `pcs`, `pack`, `l`, `ml`, etc. |
+| `price` | `Numeric(10, 2)` | **NOT NULL** | Line item price |
+
+### 4.3 Relationships
+
+```python
+# Receipt model
+items = relationship("ReceiptItem", back_populates="receipt",
+                     cascade="all, delete-orphan", lazy="selectin")
+
+# ReceiptItem model  
+receipt = relationship("Receipt", back_populates="items")
+```
+
+**Design Decision — `lazy="selectin"`**: Uses a second SELECT query to batch-load all items for a receipt. This avoids the N+1 problem when listing receipts and is async-compatible (unlike `lazy="joined"` which can cause issues with async sessions, and `lazy="subquery"` which generates complex SQL). For Sprint 1's scale, this is optimal. At millions of receipts, we can switch to explicit `selectinload()` in queries.
+
+### 4.4 Receipt Status State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> UPLOADED : POST /receipts (with storage_path)
+    UPLOADED --> PROCESSING : Gemini extraction triggered
+    PROCESSING --> PROCESSED : AI parsing successful
+    PROCESSING --> FAILED : AI parsing failed
+    FAILED --> PROCESSING : Retry triggered
+```
+
+> Sprint 1 only creates receipts in `UPLOADED` status. The state transitions are defined as an enum but transitions are not enforced yet.
+
+### 4.5 SQLite Configuration
+
+```python
+@event.listens_for(engine.sync_engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode = WAL;")      # Write-Ahead Logging
+    cursor.execute("PRAGMA foreign_keys = ON;")        # FK enforcement
+    cursor.execute("PRAGMA busy_timeout = 5000;")      # 5s wait on lock contention
+    cursor.execute("PRAGMA synchronous = NORMAL;")     # Safe with WAL, better perf
+    cursor.close()
+```
+
+**Why these PRAGMAs?**
+- **WAL mode**: Allows concurrent readers while a writer is active. Critical for a web server with concurrent requests.
+- **Foreign keys**: SQLite disables FK enforcement by default. Without this, deleting a receipt would orphan its items.
+- **Busy timeout**: Prevents immediate `SQLITE_BUSY` errors under concurrent writes; waits up to 5 seconds.
+- **Synchronous NORMAL**: With WAL enabled, `NORMAL` is safe against corruption and significantly faster than `FULL`.
+
+---
+
+## 5. Updated API Endpoints
+
+### 5.1 File Upload (Decoupled)
+
+#### `POST /api/v1/upload`
+
+**Purpose**: Save a file to local storage. Does NOT create a Receipt.
+
+**Content-Type**: `multipart/form-data`
+
+**Validations**:
+- Allowed extensions: `.jpg`, `.jpeg`, `.png`, `.pdf`
+- Allowed MIME types: `image/jpeg`, `image/png`, `application/pdf`
+- Max file size: 10 MB
+- Filename sanitized with UUID prefix
+
+**Response** `201 Created`:
+```json
+{
+  "filename": "a1b2c3d4-e5f6-7890-abcd-ef1234567890.pdf",
+  "storage_provider": "LOCAL",
+  "storage_path": "uploads/2026/07/a1b2c3d4-e5f6-7890-abcd-ef1234567890.pdf",
+  "content_type": "application/pdf",
+  "size_bytes": 1048576,
+  "uploaded_at": "2026-07-29T14:30:00Z"
+}
+```
+
+**Why decoupled?** The upload → parse → preview → save pipeline is inherently multi-step. Coupling upload with receipt creation would force us to refactor when Gemini integration arrives. The `storage_path` from the upload response is passed to `POST /receipts` when the user confirms the parsed data.
+
+---
+
+### 5.2 Receipt CRUD
+
+#### `POST /api/v1/receipts`
+Create a receipt with nested items. Accepts JSON body.
+
+**Request Body**:
+```json
+{
+  "store_name": "Blinkit",
+  "store_type": "INSTANT_GROCERY",
+  "receipt_date": "2026-07-29T10:30:00Z",
+  "total_amount": 450.50,
+  "delivery_charge": 25.00,
+  "tax": 18.00,
+  "currency": "INR",
+  "storage_path": "uploads/2026/07/a1b2c3d4.pdf",
+  "items": [
+    {
+      "item_name": "Amul Taza Milk 1L",
+      "quantity": 2,
+      "unit": "pack",
+      "price": 66.00
+    }
+  ]
+}
+```
+
+**Response**: `201 Created` — Full receipt object with generated `id`, `status: UPLOADED`, timestamps.
+
+#### `GET /api/v1/receipts`
+List receipts with pagination and optional filters.
+
+**Query Parameters**:
+| Parameter | Type | Default | Description |
+|:---|:---|:---|:---|
+| `skip` | int | 0 | Offset for pagination |
+| `limit` | int | 20 | Page size (max 100) |
+| `store_name` | string | null | Filter by store name (case-insensitive partial match) |
+| `store_type` | enum | null | Filter by store type |
+| `status` | enum | null | Filter by receipt status |
+
+**Response**: `200 OK`
+```json
+{
+  "items": [ ... ],
+  "total": 142,
+  "skip": 0,
+  "limit": 20
+}
+```
+
+#### `GET /api/v1/receipts/{receipt_id}`
+Retrieve a single receipt with nested items.
+
+**Response**: `200 OK` or `404 Not Found`
+
+#### `DELETE /api/v1/receipts/{receipt_id}`
+Delete a receipt and cascade-delete all items.
+
+**Response**: `204 No Content` or `404 Not Found`
+
+#### `GET /api/v1/health`
+Liveness/readiness check.
+
+**Response**: `200 OK`
+```json
+{
+  "status": "healthy",
+  "version": "1.0.0"
+}
+```
+
+---
+
+## 6. Enum Definitions
+
+All enums are defined in `app/core/enums.py` and used by both SQLAlchemy models and Pydantic schemas:
+
+```python
+class StoreType(str, Enum):
+    INSTANT_GROCERY = "INSTANT_GROCERY"     # Blinkit, Zepto, Swiggy Instamart
+    SUPERMARKET = "SUPERMARKET"             # BigBasket, DMart, More
+    PHARMACY = "PHARMACY"                   # Apollo, PharmEasy, 1mg
+    RESTAURANT = "RESTAURANT"              # Swiggy, Zomato
+    ECOMMERCE = "ECOMMERCE"               # Amazon, Flipkart
+    FUEL = "FUEL"                          # Petrol, diesel, EV charging
+    UTILITY = "UTILITY"                    # Electricity, water, gas
+    OTHER = "OTHER"
+
+class ReceiptStatus(str, Enum):
+    UPLOADED = "UPLOADED"
+    PROCESSING = "PROCESSING"
+    PROCESSED = "PROCESSED"
+    FAILED = "FAILED"
+
+class StorageProvider(str, Enum):
+    LOCAL = "LOCAL"
+    S3 = "S3"
+    GCS = "GCS"
+
+class Currency(str, Enum):
+    INR = "INR"
+    USD = "USD"
+    EUR = "EUR"
+    GBP = "GBP"
+```
+
+**Why `str, Enum`?** Inheriting from `str` ensures the enum serializes to its string value in JSON responses and Pydantic schemas without custom serializers.
+
+---
+
+## 7. Service Layer Design
+
+### 7.1 Sprint 1 Services
+
+| Service | Responsibility | Depends On |
+|:---|:---|:---|
+| `ReceiptService` | CRUD operations on `Receipt` + `ReceiptItem`. Handles pagination, filtering, cascade deletes. | AsyncSession |
+| `FileStorageService` | Save/retrieve/delete files from local disk. Date-partitioned paths. UUID filenames. | Settings (upload dir) |
+
+### 7.2 Future Service Slots (Not Implemented)
+
+| Service | Sprint | Purpose |
+|:---|:---|:---|
+| `GeminiService` | Sprint 2 | Sends invoice images to Gemini API, returns structured JSON |
+| `ReceiptParserService` | Sprint 2 | Orchestrates: upload → Gemini → validate → preview → save |
+| `AnalyticsService` | Sprint 3+ | Monthly spending breakdowns, category trends, budget tracking |
+| `NotificationService` | Sprint 4+ | Alerts for budget limits, shared flat notifications |
+
+### 7.3 Dependency Injection Pattern
+
+Services are injected into route handlers via FastAPI's `Depends()`:
+
+```python
+# app/api/deps.py
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session_maker() as session:
+        yield session
+
+def get_file_storage() -> FileStorageService:
+    return FileStorageService(settings=get_settings())
+
+# app/api/v1/endpoints/receipts.py
+@router.post("/", status_code=201)
+async def create_receipt(
+    receipt_in: ReceiptCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    service = ReceiptService(db)
+    return await service.create(receipt_in)
+```
+
+**Why not inject the service directly?** For Sprint 1, instantiating the service in the handler keeps the dependency graph simple and explicit. When services gain their own dependencies (e.g., `ReceiptParserService` depends on both `GeminiService` and `ReceiptService`), we can introduce a proper DI container without refactoring routes.
+
+---
+
+## 8. File Storage Design
+
+### 8.1 Date-Partitioned Directory Structure
+
+```
+uploads/
+├── 2026/
+│   ├── 07/
+│   │   ├── a1b2c3d4-e5f6-7890-abcd-ef1234567890.pdf
+│   │   ├── f9e8d7c6-b5a4-3210-fedc-ba9876543210.jpg
+│   │   └── ...
+│   └── 08/
+│       └── ...
+└── 2027/
+    └── ...
+```
+
+**Why date-partitioned?**
+- **Filesystem performance**: A single directory with 1M+ files degrades lookup performance on ext4/NTFS. Date partitioning caps each directory at ~30 days of uploads.
+- **Operational convenience**: Easy to archive old months, run cleanup scripts, or debug by date.
+- **Alignment with receipts**: Receipts are inherently time-ordered. The directory structure mirrors the data model.
+
+### 8.2 UUID Filenames
+
+Files are stored as `{uuid4}.{original_extension}`. This prevents:
+- **Filename collisions**: Two users uploading `receipt.pdf` don't overwrite each other.
+- **Path traversal attacks**: No user-controlled path components.
+- **PII leakage**: Original filenames (which may contain personal info) are not stored on disk.
+
+### 8.3 Storage Path Convention
+
+The `storage_path` stored in the database is a **relative path** from the project root: `uploads/2026/07/uuid.pdf`. This ensures portability — if the project root moves, paths still resolve correctly via `settings.UPLOAD_DIR / storage_path`.
+
+---
+
+## 9. Additional Improvements (Beyond User Requirements)
+
+### 9.1 TimestampMixin
+
+```python
+class TimestampMixin:
+    created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+```
+
+**Why?** Every future model (User, FlatGroup, Budget, PantryItem) will need timestamps. A mixin eliminates duplication and enforces consistency.
+
+### 9.2 Paginated Response Schema
+
+```python
+class PaginatedResponse(BaseModel, Generic[T]):
+    items: list[T]
+    total: int
+    skip: int
+    limit: int
+```
+
+**Why?** A generic paginated wrapper standardizes list endpoint responses across all future resources. Clients can build pagination UI components once.
+
+### 9.3 Request ID Middleware
+
+Every request gets a unique `X-Request-ID` header (UUID), logged with every log line. This enables end-to-end request tracing in production.
+
+### 9.4 Application Factory Pattern (`create_app()`)
+
+Instead of a module-level `app = FastAPI()`, we use a factory function:
+
+```python
+def create_app() -> FastAPI:
+    app = FastAPI(...)
+    app.include_router(...)
+    register_exception_handlers(app)
+    return app
+```
+
+**Why?** Enables creating isolated app instances for testing, prevents import side effects, and supports multiple configurations (test vs. production).
+
+---
+
+## 10. Dependency Versions
+
+```
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+sqlalchemy[asyncio]>=2.0.36
+aiosqlite>=0.20.0
+pydantic>=2.10.0
+pydantic-settings>=2.7.0
+alembic>=1.14.0
+python-multipart>=0.0.18
+aiofiles>=24.1.0
+python-dotenv>=1.0.1
+```
+
+**Key decisions**:
+- `aiosqlite`: Async SQLite driver for non-blocking I/O on FastAPI's event loop.
+- `python-multipart`: Required by FastAPI for `UploadFile` handling.
+- `aiofiles`: Async file I/O for non-blocking file writes during uploads.
+- Pinned with `>=` minimum versions for stability while allowing patch updates.
+
+---
+
+## 11. Verification Plan
+
+### After Code Generation
+
+1. **Install & Boot**: `pip install -r requirements.txt` → `uvicorn app.main:app --reload` → verify startup logs.
+2. **Alembic Migration**: `alembic upgrade head` → confirm `receipts` and `receipt_items` tables created with correct columns.
+3. **Upload Test**: `POST /api/v1/upload` with a test PDF → verify file saved at `uploads/2026/07/{uuid}.pdf`.
+4. **Receipt CRUD**: Create → Read → List → Delete a receipt via API.
+5. **Cascade Delete**: Create receipt with items → delete receipt → verify items also deleted.
+6. **Validation**: Upload a `.txt` file → verify 400 error. Create receipt with invalid store_type → verify 422 error.
+7. **Swagger UI**: Visit `http://127.0.0.1:8000/docs` → verify all endpoints documented with schemas.
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> **For your review before code generation:**
+>
+> 1. **Enum storage strategy**: Storing enums as `String` columns (not native SQL ENUMs) for SQLite compatibility and easier value additions without migrations. When migrating to PostgreSQL later, these can be converted to native ENUMs. Acceptable?
+>
+> 2. **Tests directory**: Created `tests/` directory placeholder. Sprint 1 won't include test code, but the structure is established. Should I include a basic test for the health endpoint as a template?
+>
+> 3. **`Numeric(12, 2)` for `total_amount`**: Supports up to ₹99,99,99,99,999.99 (nearly ₹10,000 crore). Sufficient for any receipt amount. The other monetary fields use `Numeric(10, 2)` (up to ₹99,99,99,999.99). Acceptable precision?
+
+---
