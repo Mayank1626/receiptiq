@@ -9,6 +9,8 @@ from alembic import context
 
 from app.core.config import settings
 from app.db.base import Base
+import app.models.receipt
+import app.models.receipt_item
 
 config = context.config
 
@@ -30,7 +32,11 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection, 
+        target_metadata=target_metadata,
+        render_as_batch=True
+    )
     with context.begin_transaction():
         context.run_migrations()
 
