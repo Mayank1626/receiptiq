@@ -1,5 +1,8 @@
 from typing import Sequence
 from uuid import UUID
+from datetime import datetime
+from decimal import Decimal
+from app.models.enums import ReceiptStatus
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,13 +29,33 @@ class ReceiptRepository(BaseRepository[Receipt]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def list(self, skip: int = 0, limit: int = 100) -> Sequence[Receipt]:
-        stmt = (
-            select(self.model)
-            .options(selectinload(self.model.items))
-            .offset(skip)
-            .limit(limit)
-        )
+    async def list(
+        self, 
+        skip: int = 0, 
+        limit: int = 100,
+        status: ReceiptStatus | None = None,
+        store_name: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        min_total: Decimal | None = None,
+        max_total: Decimal | None = None
+    ) -> Sequence[Receipt]:
+        stmt = select(self.model).options(selectinload(self.model.items))
+        
+        if status:
+            stmt = stmt.where(self.model.status == status)
+        if store_name:
+            stmt = stmt.where(self.model.store_name.ilike(f"%{store_name}%"))
+        if start_date:
+            stmt = stmt.where(self.model.date >= start_date)
+        if end_date:
+            stmt = stmt.where(self.model.date <= end_date)
+        if min_total is not None:
+            stmt = stmt.where(self.model.total_amount >= min_total)
+        if max_total is not None:
+            stmt = stmt.where(self.model.total_amount <= max_total)
+            
+        stmt = stmt.offset(skip).limit(limit).order_by(self.model.created_at.desc())
         result = await self.session.execute(stmt)
         return result.scalars().all()
 

@@ -1,13 +1,14 @@
 import pytest
 import uuid
 from decimal import Decimal
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.services.receipt_service import ReceiptService
-from app.schemas.receipt import ReceiptCreate
+from app.schemas.receipt import ReceiptCreate, ReceiptUpdate
 from app.models.receipt import Receipt
+from app.models.enums import ReceiptStatus
 from app.core.exceptions import ReceiptNotFoundError, InvalidReceiptError, RepositoryError
 
 @pytest.fixture
@@ -23,11 +24,16 @@ def mock_item_repo():
     return AsyncMock()
 
 @pytest.fixture
-def receipt_service(mock_session, mock_receipt_repo, mock_item_repo):
+def mock_audit_repo():
+    return MagicMock()
+
+@pytest.fixture
+def receipt_service(mock_session, mock_receipt_repo, mock_item_repo, mock_audit_repo):
     return ReceiptService(
         session=mock_session,
         receipt_repo=mock_receipt_repo,
-        item_repo=mock_item_repo
+        item_repo=mock_item_repo,
+        audit_repo=mock_audit_repo
     )
 
 def test_validate_monetary_values_valid(receipt_service):
@@ -88,27 +94,29 @@ async def test_get_receipt_not_found(receipt_service, mock_receipt_repo):
         await receipt_service.get_receipt(uuid.uuid4())
 
 @pytest.mark.asyncio
-async def test_update_receipt_success(receipt_service, mock_session, mock_receipt_repo):
+async def test_update_receipt_success(receipt_service, mock_session, mock_receipt_repo, mock_audit_repo):
     receipt_id = uuid.uuid4()
-    existing_receipt = Receipt(id=receipt_id, file_path="old.pdf")
-    receipt_in = ReceiptCreate(file_path="new.pdf")
+    existing_receipt = Receipt(id=receipt_id, store_name="Old Store", status=ReceiptStatus.DRAFT)
+    receipt_update = ReceiptUpdate(store_name="New Store")
     
     mock_receipt_repo.get_by_id.return_value = existing_receipt
     mock_receipt_repo.update.return_value = existing_receipt
     
-    result = await receipt_service.update_receipt(receipt_id, receipt_in)
+    result = await receipt_service.update_receipt(receipt_id, receipt_update)
     
-    assert result.file_path == "new.pdf"
+    assert result.store_name == "New Store"
+    assert result.status == ReceiptStatus.REVIEW_REQUIRED
     mock_session.commit.assert_called_once()
     mock_session.refresh.assert_called_once_with(existing_receipt)
+    mock_audit_repo.create.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_update_receipt_not_found(receipt_service, mock_session, mock_receipt_repo):
     mock_receipt_repo.get_by_id.return_value = None
-    receipt_in = ReceiptCreate(file_path="new.pdf")
+    receipt_update = ReceiptUpdate(store_name="New Store")
     
     with pytest.raises(ReceiptNotFoundError):
-        await receipt_service.update_receipt(uuid.uuid4(), receipt_in)
+        await receipt_service.update_receipt(uuid.uuid4(), receipt_update)
         
     mock_session.rollback.assert_called_once()
 

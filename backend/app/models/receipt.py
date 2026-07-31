@@ -11,6 +11,7 @@ from app.models.enums import ReceiptStatus, ReceiptSource, StoreType, StoragePro
 
 if TYPE_CHECKING:
     from app.models.receipt_item import ReceiptItem
+    from app.models.receipt_audit import ReceiptAudit
 
 class Receipt(Base):
     __tablename__ = "receipts"
@@ -39,3 +40,4 @@ class Receipt(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     items: Mapped[List["ReceiptItem"]] = relationship("ReceiptItem", back_populates="receipt", cascade="all, delete-orphan")
+    audits: Mapped[List["ReceiptAudit"]] = relationship("ReceiptAudit", back_populates="receipt", cascade="all, delete-orphan", order_by="ReceiptAudit.edited_at.desc()")

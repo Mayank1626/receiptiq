@@ -11,15 +11,22 @@ def get_receipt_repository(session: AsyncSession = Depends(get_db)) -> ReceiptRe
 def get_receipt_item_repository(session: AsyncSession = Depends(get_db)) -> ReceiptItemRepository:
     return ReceiptItemRepository(session)
 
+from app.repositories.receipt_audit_repository import ReceiptAuditRepository
+
+def get_receipt_audit_repository(session: AsyncSession = Depends(get_db)) -> ReceiptAuditRepository:
+    return ReceiptAuditRepository(session)
+
 def get_receipt_service(
     session: AsyncSession = Depends(get_db),
     receipt_repo: ReceiptRepository = Depends(get_receipt_repository),
-    item_repo: ReceiptItemRepository = Depends(get_receipt_item_repository)
+    item_repo: ReceiptItemRepository = Depends(get_receipt_item_repository),
+    audit_repo: ReceiptAuditRepository = Depends(get_receipt_audit_repository)
 ) -> ReceiptService:
     return ReceiptService(
         session=session,
         receipt_repo=receipt_repo,
-        item_repo=item_repo
+        item_repo=item_repo,
+        audit_repo=audit_repo
     )
 
 from app.repositories.uploaded_file_repository import UploadedFileRepository

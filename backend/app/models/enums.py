@@ -5,7 +5,13 @@ class ReceiptStatus(str, enum.Enum):
     REVIEW_REQUIRED = "REVIEW_REQUIRED"
     CONFIRMED = "CONFIRMED"
     FAILED = "FAILED"
-    REJECTED = "REJECTED"
+
+class AuditAction(str, enum.Enum):
+    UPDATE_FIELD = "UPDATE_FIELD"
+    ADD_ITEM = "ADD_ITEM"
+    UPDATE_ITEM = "UPDATE_ITEM"
+    DELETE_ITEM = "DELETE_ITEM"
+    CONFIRM = "CONFIRM"
 
 class ReceiptSource(str, enum.Enum):
     UPLOAD = "UPLOAD"

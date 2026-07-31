@@ -45,6 +45,26 @@ class ReceiptResponse(ReceiptBase):
     id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+    uploaded_file_id: Optional[uuid.UUID] = None
+    ocr_result_id: Optional[uuid.UUID] = None
+    ai_extraction_result_id: Optional[uuid.UUID] = None
     items: List[ReceiptItemResponse] = Field(default_factory=list)
     
     model_config = ConfigDict(from_attributes=True)
+
+class ReceiptUpdate(BaseModel):
+    store_name: Optional[str] = None
+    store_type: Optional[StoreType] = None
+    date: Optional[datetime] = None
+    total_amount: Optional[Decimal] = None
+    subtotal: Optional[Decimal] = None
+    tax: Optional[Decimal] = None
+    delivery_charge: Optional[Decimal] = None
+    discount: Optional[Decimal] = None
+
+class ReceiptItemUpdate(BaseModel):
+    name: Optional[str] = None
+    quantity: Optional[float] = None
+    item_price: Optional[Decimal] = None
+    total_price: Optional[Decimal] = None
+    category: Optional[str] = None
