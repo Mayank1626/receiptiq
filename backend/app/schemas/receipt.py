@@ -10,6 +10,7 @@ class ReceiptItemBase(BaseModel):
     name: str
     quantity: float = 1.0
     item_price: Optional[Decimal] = None
+    total_price: Optional[Decimal] = None
     category: Optional[str] = None
 
 class ReceiptItemCreate(ReceiptItemBase):
@@ -22,7 +23,7 @@ class ReceiptItemResponse(ReceiptItemBase):
     model_config = ConfigDict(from_attributes=True)
 
 class ReceiptBase(BaseModel):
-    status: ReceiptStatus = ReceiptStatus.PENDING
+    status: ReceiptStatus = ReceiptStatus.DRAFT
     source: ReceiptSource = ReceiptSource.UPLOAD
     store_type: Optional[StoreType] = None
     store_name: Optional[str] = None

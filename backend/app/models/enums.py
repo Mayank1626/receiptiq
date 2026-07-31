@@ -1,9 +1,9 @@
 import enum
 
 class ReceiptStatus(str, enum.Enum):
-    PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
-    COMPLETED = "COMPLETED"
+    DRAFT = "DRAFT"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    CONFIRMED = "CONFIRMED"
     FAILED = "FAILED"
     REJECTED = "REJECTED"
 
@@ -26,6 +26,7 @@ class StorageProvider(str, enum.Enum):
 
 class ProcessingStatus(str, enum.Enum):
     UPLOADED = "UPLOADED"
-    OCR_COMPLETE = "OCR_COMPLETE"
-    AI_COMPLETE = "AI_COMPLETE"
+    OCR_COMPLETED = "OCR_COMPLETED"
+    AI_COMPLETED = "AI_COMPLETED"
+    MATERIALIZED = "MATERIALIZED"
     FAILED = "FAILED"

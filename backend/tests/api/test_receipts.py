@@ -30,7 +30,7 @@ async def async_client(override_dependency):
 def create_mock_receipt(receipt_id=None, total_amount=None):
     return Receipt(
         id=receipt_id or uuid.uuid4(),
-        status=ReceiptStatus.PENDING,
+        status=ReceiptStatus.DRAFT,
         source=ReceiptSource.UPLOAD,
         storage_provider=StorageProvider.LOCAL,
         file_path="test.pdf",

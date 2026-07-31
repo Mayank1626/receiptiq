@@ -17,6 +17,7 @@ class ReceiptItem(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     quantity: Mapped[float] = mapped_column(Float, default=1.0)
     item_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    total_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     category: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     receipt: Mapped["Receipt"] = relationship("Receipt", back_populates="items")

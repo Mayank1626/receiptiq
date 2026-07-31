@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional, TYPE_CHECKING
-from sqlalchemy import String, Numeric, DateTime, Enum as SQLEnum, Uuid
+from sqlalchemy import String, Numeric, DateTime, Enum as SQLEnum, Uuid, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -16,8 +16,12 @@ class Receipt(Base):
     __tablename__ = "receipts"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    status: Mapped[ReceiptStatus] = mapped_column(SQLEnum(ReceiptStatus), default=ReceiptStatus.PENDING, index=True)
+    status: Mapped[ReceiptStatus] = mapped_column(SQLEnum(ReceiptStatus), default=ReceiptStatus.DRAFT, index=True)
     source: Mapped[ReceiptSource] = mapped_column(SQLEnum(ReceiptSource), default=ReceiptSource.UPLOAD, index=True)
+    
+    uploaded_file_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("uploaded_files.id", ondelete="SET NULL"), nullable=True)
+    ocr_result_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("ocr_results.id", ondelete="SET NULL"), nullable=True)
+    ai_extraction_result_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("ai_extraction_results.id", ondelete="SET NULL"), nullable=True)
     store_type: Mapped[Optional[StoreType]] = mapped_column(SQLEnum(StoreType), nullable=True)
     store_name: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     
