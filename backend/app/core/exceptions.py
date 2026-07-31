@@ -21,3 +21,7 @@ class DuplicateReceiptError(ReceiptIQError):
 class RepositoryError(ReceiptIQError):
     """Raised when a repository operation fails."""
     pass
+
+class FileValidationError(ReceiptIQError):
+    """Raised when an uploaded file is invalid (size, MIME type, etc.)."""
+    pass

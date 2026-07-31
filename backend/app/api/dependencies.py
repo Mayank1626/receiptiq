@@ -21,3 +21,21 @@ def get_receipt_service(
         receipt_repo=receipt_repo,
         item_repo=item_repo
     )
+
+from app.repositories.uploaded_file_repository import UploadedFileRepository
+from app.services.upload_service import UploadService
+from app.storage.base import StorageProvider
+from app.storage.local import LocalStorageProvider
+
+def get_storage_provider() -> StorageProvider:
+    return LocalStorageProvider()
+
+def get_uploaded_file_repository(session: AsyncSession = Depends(get_db)) -> UploadedFileRepository:
+    return UploadedFileRepository(session)
+
+def get_upload_service(
+    session: AsyncSession = Depends(get_db),
+    provider: StorageProvider = Depends(get_storage_provider),
+    repository: UploadedFileRepository = Depends(get_uploaded_file_repository)
+) -> UploadService:
+    return UploadService(session, provider, repository)

@@ -23,3 +23,9 @@ class StorageProvider(str, enum.Enum):
     LOCAL = "LOCAL"
     GCS = "GCS"
     S3 = "S3"
+
+class ProcessingStatus(str, enum.Enum):
+    UPLOADED = "UPLOADED"
+    OCR_COMPLETE = "OCR_COMPLETE"
+    AI_COMPLETE = "AI_COMPLETE"
+    FAILED = "FAILED"

@@ -12,7 +12,8 @@ from app.core.exceptions import (
     ReceiptNotFoundError,
     InvalidReceiptError,
     DuplicateReceiptError,
-    RepositoryError
+    RepositoryError,
+    FileValidationError
 )
 
 # Setup logging
@@ -47,6 +48,11 @@ async def receipt_not_found_handler(request: Request, exc: ReceiptNotFoundError)
 @app.exception_handler(InvalidReceiptError)
 async def invalid_receipt_handler(request: Request, exc: InvalidReceiptError):
     logger.info(f"Invalid receipt data: {str(exc)}")
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+@app.exception_handler(FileValidationError)
+async def file_validation_handler(request: Request, exc: FileValidationError):
+    logger.info(f"File validation failed: {str(exc)}")
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 @app.exception_handler(DuplicateReceiptError)
