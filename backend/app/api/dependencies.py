@@ -46,6 +46,11 @@ from app.repositories.ocr_result_repository import OCRResultRepository
 from app.services.ocr_service import OCRService
 
 def get_ocr_provider() -> OCRProvider:
+    from app.core.config import settings
+    if settings.OCR_PROVIDER == "google_vision":
+        from app.ocr.google_vision import GoogleVisionOCRProvider
+        return GoogleVisionOCRProvider()
+    from app.ocr.mock import MockOCRProvider
     return MockOCRProvider()
 
 def get_ocr_result_repository(session: AsyncSession = Depends(get_db)) -> OCRResultRepository:
@@ -60,12 +65,16 @@ def get_ocr_service(
     return OCRService(session, provider, ocr_repo, upload_repo)
 
 from app.ai.base import AIProvider
-from app.ai.gemini import GeminiAIProvider
 from app.repositories.ai_extraction_result_repository import AIExtractionResultRepository
 from app.services.ai_service import AIService
 
 def get_ai_provider() -> AIProvider:
-    return GeminiAIProvider()
+    from app.core.config import settings
+    if settings.AI_PROVIDER == "gemini":
+        from app.ai.gemini import GeminiAIProvider
+        return GeminiAIProvider()
+    from app.ai.mock import MockAIProvider
+    return MockAIProvider()
 
 def get_ai_result_repository(session: AsyncSession = Depends(get_db)) -> AIExtractionResultRepository:
     return AIExtractionResultRepository(session)

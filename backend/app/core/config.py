@@ -21,6 +21,17 @@ class Settings(BaseSettings):
             return v
         raise ValueError(v)
 
+    # Providers
+    OCR_PROVIDER: str = "mock"
+    AI_PROVIDER: str = "mock"
+    
+    # AI Config
+    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_API_KEY: Union[str, None] = None
+    
+    # GCP Auth
+    GOOGLE_APPLICATION_CREDENTIALS: Union[str, None] = None
+
     model_config = SettingsConfigDict(case_sensitive=True, env_file=".env")
 
 settings = Settings()
