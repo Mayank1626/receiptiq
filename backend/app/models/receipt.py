@@ -23,6 +23,8 @@ class Receipt(Base):
     uploaded_file_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("uploaded_files.id", ondelete="SET NULL"), nullable=True)
     ocr_result_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("ocr_results.id", ondelete="SET NULL"), nullable=True)
     ai_extraction_result_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("ai_extraction_results.id", ondelete="SET NULL"), nullable=True)
+    owner_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    household_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("households.id", ondelete="SET NULL"), nullable=True, index=True)
     store_type: Mapped[Optional[StoreType]] = mapped_column(SQLEnum(StoreType), nullable=True)
     store_name: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     

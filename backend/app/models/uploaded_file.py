@@ -1,6 +1,7 @@
 import uuid
+from typing import Optional
 from datetime import datetime
-from sqlalchemy import String, Integer, func
+from sqlalchemy import String, Integer, func, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -19,5 +20,8 @@ class UploadedFile(Base):
     
     storage_provider: Mapped[StorageProvider] = mapped_column(default=StorageProvider.LOCAL)
     processing_status: Mapped[ProcessingStatus] = mapped_column(default=ProcessingStatus.UPLOADED, index=True)
+    
+    owner_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    household_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("households.id", ondelete="SET NULL"), nullable=True, index=True)
     
     uploaded_at: Mapped[datetime] = mapped_column(server_default=func.now(), index=True)

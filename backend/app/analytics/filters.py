@@ -7,4 +7,4 @@ class AnalyticsFilter(BaseModel):
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     owner_id: Optional[UUID] = None
-    household_id: Optional[UUID] = None
+    household_ids: Optional[list[UUID]] = None

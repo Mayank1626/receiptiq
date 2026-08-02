@@ -10,9 +10,24 @@ from app.services.analytics_service import AnalyticsService
 def mock_analytics_service():
     return AsyncMock(spec=AnalyticsService)
 
+from app.api.dependencies import get_current_user
+from app.models.user import User
+import uuid
+
 @pytest.fixture
-def override_analytics_dependency(mock_analytics_service):
+def mock_user():
+    user = User(
+        id=uuid.uuid4(),
+        email="test@example.com",
+        is_active=True
+    )
+    user.memberships = []
+    return user
+
+@pytest.fixture
+def override_analytics_dependency(mock_analytics_service, mock_user):
     app.dependency_overrides[get_analytics_service] = lambda: mock_analytics_service
+    app.dependency_overrides[get_current_user] = lambda: mock_user
     yield
     app.dependency_overrides.clear()
 

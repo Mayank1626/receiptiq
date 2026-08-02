@@ -13,9 +13,23 @@ from app.core.exceptions import FileValidationError
 def mock_upload_service():
     return AsyncMock()
 
+from app.api.dependencies import get_current_user
+from app.models.user import User
+
 @pytest.fixture
-def override_upload_dependency(mock_upload_service):
+def mock_user():
+    user = User(
+        id=uuid.uuid4(),
+        email="test@example.com",
+        is_active=True
+    )
+    user.memberships = []
+    return user
+
+@pytest.fixture
+def override_upload_dependency(mock_upload_service, mock_user):
     app.dependency_overrides[get_upload_service] = lambda: mock_upload_service
+    app.dependency_overrides[get_current_user] = lambda: mock_user
     yield
     app.dependency_overrides.clear()
 

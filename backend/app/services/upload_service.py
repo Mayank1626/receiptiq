@@ -1,5 +1,6 @@
 import uuid
 import hashlib
+from app.models.user import User
 from datetime import datetime, timezone
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +25,7 @@ class UploadService:
         self.provider = provider
         self.repository = repository
 
-    async def upload_file(self, file: UploadFile) -> UploadedFile:
+    async def upload_file(self, file: UploadFile, user: "User") -> UploadedFile:
         if file.content_type not in ALLOWED_MIME_TYPES:
             raise FileValidationError(f"Unsupported file type: {file.content_type}")
             
@@ -57,7 +58,8 @@ class UploadService:
                 checksum_sha256=sha256_hash,
                 storage_provider=provider_enum,
                 processing_status=ProcessingStatus.UPLOADED,
-                uploaded_at=now
+                uploaded_at=now,
+                owner_id=user.id
             )
             
             created_record = await self.repository.create(uploaded_record)

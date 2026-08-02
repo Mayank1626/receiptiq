@@ -16,7 +16,16 @@ class AnalyticsRepository:
             stmt = stmt.where(Receipt.date >= filters.start_date)
         if filters.end_date:
             stmt = stmt.where(Receipt.date <= filters.end_date)
-        # owner_id and household_id placeholders for future
+            
+        if filters.owner_id is not None:
+            conditions = [Receipt.owner_id == filters.owner_id]
+            if filters.household_ids:
+                conditions.append(Receipt.household_id.in_(filters.household_ids))
+            conditions.append(and_(Receipt.owner_id.is_(None), Receipt.household_id.is_(None)))
+            
+            from sqlalchemy import or_
+            stmt = stmt.where(or_(*conditions))
+            
         return stmt
 
     async def get_dashboard_metrics(self, filters: AnalyticsFilter) -> Dict[str, Any]:

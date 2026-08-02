@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     # DB settings
     DATABASE_URL: str = "sqlite+aiosqlite:///./receiptiq.db"
 
+    # JWT Settings
+    JWT_SECRET_KEY: str = "super_secret_key_change_in_production"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
     # CORS
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
 

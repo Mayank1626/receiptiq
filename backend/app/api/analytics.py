@@ -14,21 +14,22 @@ from app.schemas.analytics import (
 )
 from app.analytics.filters import AnalyticsFilter
 from app.services.analytics_service import AnalyticsService
-from app.api.dependencies import get_analytics_service
+from app.api.dependencies import get_analytics_service, get_current_user
+from app.models.user import User
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 def get_analytics_filter(
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
-    owner_id: Optional[UUID] = Query(None),
-    household_id: Optional[UUID] = Query(None)
+    user: User = Depends(get_current_user)
 ) -> AnalyticsFilter:
+    household_ids = [m.household_id for m in user.memberships]
     return AnalyticsFilter(
         start_date=start_date,
         end_date=end_date,
-        owner_id=owner_id,
-        household_id=household_id
+        owner_id=user.id,
+        household_ids=household_ids
     )
 
 @router.get("/dashboard", response_model=DashboardMetrics, summary="Get Dashboard Metrics")

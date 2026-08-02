@@ -20,12 +20,26 @@ class ReceiptRepository(BaseRepository[Receipt]):
         await self.session.refresh(receipt)
         return receipt
 
-    async def get_by_id(self, receipt_id: UUID) -> Receipt | None:
+    async def get_by_id(
+        self, 
+        receipt_id: UUID,
+        owner_id: UUID | None = None,
+        household_ids: list[UUID] | None = None
+    ) -> Receipt | None:
         stmt = (
             select(self.model)
             .where(self.model.id == receipt_id)
             .options(selectinload(self.model.items))
         )
+        
+        if owner_id is not None:
+            from sqlalchemy import or_, and_
+            conditions = [self.model.owner_id == owner_id]
+            if household_ids:
+                conditions.append(self.model.household_id.in_(household_ids))
+            conditions.append(and_(self.model.owner_id.is_(None), self.model.household_id.is_(None)))
+            stmt = stmt.where(or_(*conditions))
+            
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -38,7 +52,9 @@ class ReceiptRepository(BaseRepository[Receipt]):
         start_date: datetime | None = None,
         end_date: datetime | None = None,
         min_total: Decimal | None = None,
-        max_total: Decimal | None = None
+        max_total: Decimal | None = None,
+        owner_id: UUID | None = None,
+        household_ids: list[UUID] | None = None
     ) -> Sequence[Receipt]:
         stmt = select(self.model).options(selectinload(self.model.items))
         
@@ -54,6 +70,14 @@ class ReceiptRepository(BaseRepository[Receipt]):
             stmt = stmt.where(self.model.total_amount >= min_total)
         if max_total is not None:
             stmt = stmt.where(self.model.total_amount <= max_total)
+            
+        if owner_id is not None:
+            from sqlalchemy import or_, and_
+            conditions = [self.model.owner_id == owner_id]
+            if household_ids:
+                conditions.append(self.model.household_id.in_(household_ids))
+            conditions.append(and_(self.model.owner_id.is_(None), self.model.household_id.is_(None)))
+            stmt = stmt.where(or_(*conditions))
             
         stmt = stmt.offset(skip).limit(limit).order_by(self.model.created_at.desc())
         result = await self.session.execute(stmt)

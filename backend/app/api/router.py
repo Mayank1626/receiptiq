@@ -6,9 +6,13 @@ from app.api import ocr
 from app.api import ai
 from app.api import normalization
 from app.api import analytics
+from app.api import auth
+from app.api import households
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
+api_router.include_router(auth.router)
+api_router.include_router(households.router)
 api_router.include_router(receipts.router)
 api_router.include_router(uploads.router)
 api_router.include_router(ocr.router)

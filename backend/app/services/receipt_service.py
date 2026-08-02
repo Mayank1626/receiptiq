@@ -15,6 +15,8 @@ from app.repositories.receipt_audit_repository import ReceiptAuditRepository
 from app.schemas.receipt import ReceiptCreate, ReceiptItemCreate, ReceiptUpdate, ReceiptItemUpdate
 from app.core.exceptions import ReceiptNotFoundError, InvalidReceiptError, RepositoryError
 
+from app.models.user import User
+
 class ReceiptService:
     def __init__(
         self,
@@ -41,7 +43,7 @@ class ReceiptService:
         if receipt_in.delivery_charge is not None and receipt_in.delivery_charge < Decimal("0"):
             raise InvalidReceiptError("Delivery charge cannot be negative.")
 
-    async def create_receipt(self, receipt_in: ReceiptCreate, items_in: Sequence[ReceiptItemCreate] = ()) -> Receipt:
+    async def create_receipt(self, receipt_in: ReceiptCreate, user: User, items_in: Sequence[ReceiptItemCreate] = ()) -> Receipt:
         self._validate_monetary_values(receipt_in)
         
         try:
@@ -57,7 +59,8 @@ class ReceiptService:
                 discount=receipt_in.discount,
                 date=receipt_in.date,
                 storage_provider=receipt_in.storage_provider,
-                file_path=receipt_in.file_path
+                file_path=receipt_in.file_path,
+                owner_id=user.id
             )
             
             created_receipt = await self.receipt_repo.create(receipt)
@@ -84,9 +87,10 @@ class ReceiptService:
             await self.session.rollback()
             raise
 
-    async def get_receipt(self, receipt_id: UUID) -> Receipt:
+    async def get_receipt(self, receipt_id: UUID, user: User) -> Receipt:
         try:
-            receipt = await self.receipt_repo.get_by_id(receipt_id)
+            household_ids = [m.household_id for m in user.memberships]
+            receipt = await self.receipt_repo.get_by_id(receipt_id, user.id, household_ids)
             if not receipt:
                 raise ReceiptNotFoundError(f"Receipt {receipt_id} not found.")
             return receipt
@@ -97,6 +101,7 @@ class ReceiptService:
 
     async def list_receipts(
         self, 
+        user: User,
         skip: int = 0, 
         limit: int = 100,
         status: ReceiptStatus | None = None,
@@ -107,6 +112,7 @@ class ReceiptService:
         max_total: Decimal | None = None
     ) -> Sequence[Receipt]:
         try:
+            household_ids = [m.household_id for m in user.memberships]
             return await self.receipt_repo.list(
                 skip=skip, 
                 limit=limit,
@@ -115,16 +121,19 @@ class ReceiptService:
                 start_date=start_date,
                 end_date=end_date,
                 min_total=min_total,
-                max_total=max_total
+                max_total=max_total,
+                owner_id=user.id,
+                household_ids=household_ids
             )
         except SQLAlchemyError as e:
             raise RepositoryError(f"Database error while listing receipts: {str(e)}") from e
 
-    async def update_receipt(self, receipt_id: UUID, receipt_update: ReceiptUpdate) -> Receipt:
+    async def update_receipt(self, receipt_id: UUID, receipt_update: ReceiptUpdate, user: User) -> Receipt:
         self._validate_monetary_values(receipt_update)
         
         try:
-            receipt = await self.receipt_repo.get_by_id(receipt_id)
+            household_ids = [m.household_id for m in user.memberships]
+            receipt = await self.receipt_repo.get_by_id(receipt_id, user.id, household_ids)
             if not receipt:
                 raise ReceiptNotFoundError(f"Receipt {receipt_id} not found.")
             
@@ -139,7 +148,8 @@ class ReceiptService:
                         action=AuditAction.UPDATE_FIELD,
                         field_name=field,
                         old_value=str(old_value) if old_value is not None else None,
-                        new_value=str(new_value) if new_value is not None else None
+                        new_value=str(new_value) if new_value is not None else None,
+                        edited_by_user_id=user.id
                     )
                     setattr(receipt, field, new_value)
                     changed = True
@@ -162,9 +172,10 @@ class ReceiptService:
             await self.session.rollback()
             raise
 
-    async def delete_receipt(self, receipt_id: UUID) -> None:
+    async def delete_receipt(self, receipt_id: UUID, user: User) -> None:
         try:
-            receipt = await self.receipt_repo.get_by_id(receipt_id)
+            household_ids = [m.household_id for m in user.memberships]
+            receipt = await self.receipt_repo.get_by_id(receipt_id, user.id, household_ids)
             if not receipt:
                 raise ReceiptNotFoundError(f"Receipt {receipt_id} not found.")
             
@@ -181,9 +192,10 @@ class ReceiptService:
             await self.session.rollback()
             raise
 
-    async def add_item(self, receipt_id: UUID, item_in: ReceiptItemCreate) -> Receipt:
+    async def add_item(self, receipt_id: UUID, item_in: ReceiptItemCreate, user: User) -> Receipt:
         try:
-            receipt = await self.receipt_repo.get_by_id(receipt_id)
+            household_ids = [m.household_id for m in user.memberships]
+            receipt = await self.receipt_repo.get_by_id(receipt_id, user.id, household_ids)
             if not receipt:
                 raise ReceiptNotFoundError(f"Receipt {receipt_id} not found.")
             
@@ -202,7 +214,8 @@ class ReceiptService:
                 action=AuditAction.ADD_ITEM,
                 field_name=None,
                 old_value=None,
-                new_value=item_in.name
+                new_value=item_in.name,
+                edited_by_user_id=user.id
             )
             
             receipt.status = ReceiptStatus.REVIEW_REQUIRED
@@ -214,9 +227,10 @@ class ReceiptService:
             await self.session.rollback()
             raise RepositoryError(f"Failed to add item: {str(e)}") from e
 
-    async def update_item(self, receipt_id: UUID, item_id: UUID, item_update: ReceiptItemUpdate) -> Receipt:
+    async def update_item(self, receipt_id: UUID, item_id: UUID, item_update: ReceiptItemUpdate, user: User) -> Receipt:
         try:
-            receipt = await self.receipt_repo.get_by_id(receipt_id)
+            household_ids = [m.household_id for m in user.memberships]
+            receipt = await self.receipt_repo.get_by_id(receipt_id, user.id, household_ids)
             if not receipt:
                 raise ReceiptNotFoundError(f"Receipt {receipt_id} not found.")
             
@@ -234,7 +248,8 @@ class ReceiptService:
                         action=AuditAction.UPDATE_ITEM,
                         field_name=f"item.{field}",
                         old_value=str(old_value) if old_value is not None else None,
-                        new_value=str(new_value) if new_value is not None else None
+                        new_value=str(new_value) if new_value is not None else None,
+                        edited_by_user_id=user.id
                     )
                     setattr(target_item, field, new_value)
                     changed = True
@@ -251,9 +266,10 @@ class ReceiptService:
             await self.session.rollback()
             raise RepositoryError(f"Failed to update item: {str(e)}") from e
 
-    async def delete_item(self, receipt_id: UUID, item_id: UUID) -> Receipt:
+    async def delete_item(self, receipt_id: UUID, item_id: UUID, user: User) -> Receipt:
         try:
-            receipt = await self.receipt_repo.get_by_id(receipt_id)
+            household_ids = [m.household_id for m in user.memberships]
+            receipt = await self.receipt_repo.get_by_id(receipt_id, user.id, household_ids)
             if not receipt:
                 raise ReceiptNotFoundError(f"Receipt {receipt_id} not found.")
             
@@ -266,7 +282,8 @@ class ReceiptService:
                 action=AuditAction.DELETE_ITEM,
                 field_name=None,
                 old_value=target_item.name,
-                new_value=None
+                new_value=None,
+                edited_by_user_id=user.id
             )
             
             await self.item_repo.delete(target_item)
@@ -280,9 +297,10 @@ class ReceiptService:
             await self.session.rollback()
             raise RepositoryError(f"Failed to delete item: {str(e)}") from e
 
-    async def confirm_receipt(self, receipt_id: UUID) -> Receipt:
+    async def confirm_receipt(self, receipt_id: UUID, user: User) -> Receipt:
         try:
-            receipt = await self.receipt_repo.get_by_id(receipt_id)
+            household_ids = [m.household_id for m in user.memberships]
+            receipt = await self.receipt_repo.get_by_id(receipt_id, user.id, household_ids)
             if not receipt:
                 raise ReceiptNotFoundError(f"Receipt {receipt_id} not found.")
             

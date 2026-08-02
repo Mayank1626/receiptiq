@@ -36,3 +36,8 @@ class ProcessingStatus(str, enum.Enum):
     AI_COMPLETED = "AI_COMPLETED"
     MATERIALIZED = "MATERIALIZED"
     FAILED = "FAILED"
+
+class HouseholdRole(str, enum.Enum):
+    OWNER = "OWNER"
+    ADMIN = "ADMIN"
+    MEMBER = "MEMBER"

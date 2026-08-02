@@ -4,5 +4,14 @@ from app.models.uploaded_file import UploadedFile
 from app.models.ocr_result import OCRResult
 from app.models.ai_extraction_result import AIExtractionResult
 from app.models.receipt_audit import ReceiptAudit
+from app.models.user import User
+from app.models.household import Household
+from app.models.household_member import HouseholdMember
+from app.models.refresh_token import RefreshToken
+from app.models.household_invitation import HouseholdInvitation
 
-__all__ = ["Receipt", "ReceiptItem", "UploadedFile", "OCRResult", "AIExtractionResult"]
+__all__ = [
+    "Receipt", "ReceiptItem", "UploadedFile", "OCRResult", 
+    "AIExtractionResult", "ReceiptAudit", "User", "Household", 
+    "HouseholdMember", "RefreshToken", "HouseholdInvitation"
+]

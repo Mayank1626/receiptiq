@@ -16,9 +16,23 @@ from app.core.exceptions import ReceiptNotFoundError, InvalidReceiptError
 def mock_service():
     return AsyncMock(spec=ReceiptService)
 
+from app.api.dependencies import get_receipt_service, get_current_user
+from app.models.user import User
+
 @pytest.fixture
-def override_dependency(mock_service):
+def mock_user():
+    user = User(
+        id=uuid.uuid4(),
+        email="test@example.com",
+        is_active=True
+    )
+    user.memberships = []
+    return user
+
+@pytest.fixture
+def override_dependency(mock_service, mock_user):
     app.dependency_overrides[get_receipt_service] = lambda: mock_service
+    app.dependency_overrides[get_current_user] = lambda: mock_user
     yield
     app.dependency_overrides.clear()
 

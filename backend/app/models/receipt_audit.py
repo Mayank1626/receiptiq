@@ -20,6 +20,7 @@ class ReceiptAudit(Base):
     field_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     old_value: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     new_value: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    edited_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     edited_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     receipt: Mapped["Receipt"] = relationship("Receipt", back_populates="audits")

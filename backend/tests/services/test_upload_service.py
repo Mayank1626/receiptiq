@@ -34,11 +34,24 @@ def create_upload_file(filename: str, content: bytes, content_type: str) -> Uplo
     file = io.BytesIO(content)
     return UploadFile(filename=filename, file=file, headers={"content-type": content_type})
 
+from app.models.user import User
+import uuid
+
+@pytest.fixture
+def mock_user():
+    user = User(
+        id=uuid.uuid4(),
+        email="test@example.com",
+        is_active=True
+    )
+    user.memberships = []
+    return user
+
 @pytest.mark.asyncio
-async def test_upload_success(upload_service, mock_session, mock_provider, mock_repository):
+async def test_upload_success(upload_service, mock_session, mock_provider, mock_repository, mock_user):
     file = create_upload_file("receipt.pdf", b"pdfcontent", "application/pdf")
     
-    record = await upload_service.upload_file(file)
+    record = await upload_service.upload_file(file, mock_user)
     
     assert record.original_filename == "receipt.pdf"
     assert record.mime_type == "application/pdf"
@@ -49,13 +62,13 @@ async def test_upload_success(upload_service, mock_session, mock_provider, mock_
     mock_session.commit.assert_called_once()
 
 @pytest.mark.asyncio
-async def test_upload_invalid_mime(upload_service):
+async def test_upload_invalid_mime(upload_service, mock_user):
     file = create_upload_file("malicious.exe", b"execontent", "application/x-msdownload")
     with pytest.raises(FileValidationError):
-        await upload_service.upload_file(file)
+        await upload_service.upload_file(file, mock_user)
 
 @pytest.mark.asyncio
-async def test_upload_large_file(upload_service):
+async def test_upload_large_file(upload_service, mock_user):
     # Mocking large size since we don't want to load 11MB into memory
     file = create_upload_file("large.jpg", b"a", "image/jpeg")
     
@@ -63,4 +76,4 @@ async def test_upload_large_file(upload_service):
     file.read = AsyncMock(return_value=b"a" * (11 * 1024 * 1024))
     
     with pytest.raises(FileValidationError):
-        await upload_service.upload_file(file)
+        await upload_service.upload_file(file, mock_user)
