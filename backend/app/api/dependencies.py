@@ -12,9 +12,19 @@ def get_receipt_item_repository(session: AsyncSession = Depends(get_db)) -> Rece
     return ReceiptItemRepository(session)
 
 from app.repositories.receipt_audit_repository import ReceiptAuditRepository
+from app.repositories.analytics_repository import AnalyticsRepository
+from app.services.analytics_service import AnalyticsService
 
 def get_receipt_audit_repository(session: AsyncSession = Depends(get_db)) -> ReceiptAuditRepository:
     return ReceiptAuditRepository(session)
+
+def get_analytics_repository(session: AsyncSession = Depends(get_db)) -> AnalyticsRepository:
+    return AnalyticsRepository(session)
+
+def get_analytics_service(
+    repo: AnalyticsRepository = Depends(get_analytics_repository)
+) -> AnalyticsService:
+    return AnalyticsService(repo=repo)
 
 def get_receipt_service(
     session: AsyncSession = Depends(get_db),
