@@ -8,6 +8,8 @@ from app.api import normalization
 from app.api import analytics
 from app.api import auth
 from app.api import households
+from app.api import splits
+from app.api import settlements
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
@@ -19,3 +21,5 @@ api_router.include_router(ocr.router)
 api_router.include_router(ai.router)
 api_router.include_router(normalization.router)
 api_router.include_router(analytics.router)
+api_router.include_router(splits.router)
+api_router.include_router(settlements.router)

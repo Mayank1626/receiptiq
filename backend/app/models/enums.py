@@ -12,6 +12,8 @@ class AuditAction(str, enum.Enum):
     UPDATE_ITEM = "UPDATE_ITEM"
     DELETE_ITEM = "DELETE_ITEM"
     CONFIRM = "CONFIRM"
+    SPLIT_CREATED = "SPLIT_CREATED"
+    SPLIT_INVALIDATED = "SPLIT_INVALIDATED"
 
 class ReceiptSource(str, enum.Enum):
     UPLOAD = "UPLOAD"
@@ -41,3 +43,16 @@ class HouseholdRole(str, enum.Enum):
     OWNER = "OWNER"
     ADMIN = "ADMIN"
     MEMBER = "MEMBER"
+
+class SplitType(str, enum.Enum):
+    EQUAL = "EQUAL"
+    PERCENTAGE = "PERCENTAGE"
+    FIXED = "FIXED"
+
+class SplitStatus(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    INVALID = "INVALID"
+
+class SettlementStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"

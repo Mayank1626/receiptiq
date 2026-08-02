@@ -9,9 +9,13 @@ from app.models.household import Household
 from app.models.household_member import HouseholdMember
 from app.models.refresh_token import RefreshToken
 from app.models.household_invitation import HouseholdInvitation
+from app.models.expense_split import ExpenseSplit
+from app.models.expense_share import ExpenseShare
+from app.models.settlement import Settlement
 
 __all__ = [
     "Receipt", "ReceiptItem", "UploadedFile", "OCRResult", 
     "AIExtractionResult", "ReceiptAudit", "User", "Household", 
-    "HouseholdMember", "RefreshToken", "HouseholdInvitation"
+    "HouseholdMember", "RefreshToken", "HouseholdInvitation",
+    "ExpenseSplit", "ExpenseShare", "Settlement"
 ]

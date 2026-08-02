@@ -92,3 +92,12 @@ As ReceiptIQ heavily integrates with AI (e.g., Gemini) for OCR extraction and da
 - **No Direct Coupling**: Services must never depend directly on a specific provider's SDK (like Gemini). They must depend on the interface.
 - **Validation Before Persistence**: AI responses are inherently unpredictable. Outputs must be rigorously validated via Pydantic schemas before persisting to the database.
 - **Raw Storage**: Raw AI output (or the raw OCR text) should be stored separately from the normalized `Receipt` data to allow for future re-processing or auditing.
+
+## 12. Authentication & Authorization (Households)
+
+To support multiple users and shared expenses securely:
+
+- **JWT Authentication**: We use stateless, short-lived JSON Web Tokens (JWT) for API authorization.
+- **Refresh Tokens**: Long-lived sessions are maintained using stateful refresh tokens stored securely as SHA-256 hashes in the database.
+- **Household Abstraction**: Users can collaborate on receipts through a "Household". A user can be a member of multiple households.
+- **Row-level Ownership**: Resources (receipts, analytics, uploads) are owned by either an individual User (`owner_id`) or a Household (`household_id`). Access is evaluated at the repository query level using dependency injection (`get_current_user`).

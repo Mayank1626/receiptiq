@@ -140,9 +140,14 @@ class ReceiptService:
             # Update fields and track audits
             update_data = receipt_update.model_dump(exclude_unset=True)
             changed = False
+            total_amount_changed = False
+            
             for field, new_value in update_data.items():
                 old_value = getattr(receipt, field)
                 if old_value != new_value:
+                    if field == "total_amount":
+                        total_amount_changed = True
+                        
                     self.audit_repo.create(
                         receipt_id=receipt.id,
                         action=AuditAction.UPDATE_FIELD,
@@ -155,6 +160,21 @@ class ReceiptService:
                     changed = True
 
             if changed:
+                if total_amount_changed:
+                    from app.repositories.split_repository import SplitRepository
+                    from app.models.enums import SplitStatus
+                    split_repo = SplitRepository(self.session)
+                    await split_repo.update_status_for_receipt(receipt.id, SplitStatus.INVALID)
+                    
+                    self.audit_repo.create(
+                        receipt_id=receipt.id,
+                        action=AuditAction.SPLIT_INVALIDATED,
+                        field_name=None,
+                        old_value=None,
+                        new_value="Total amount changed",
+                        edited_by_user_id=user.id
+                    )
+
                 receipt.status = ReceiptStatus.REVIEW_REQUIRED
                 updated_receipt = await self.receipt_repo.update(receipt)
                 await self.session.commit()

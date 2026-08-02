@@ -172,3 +172,12 @@ def get_receipt_materialization_service(
     ocr_repo: OCRResultRepository = Depends(get_ocr_result_repository)
 ) -> ReceiptMaterializationService:
     return ReceiptMaterializationService(session, ai_repo, receipt_repo, upload_repo, ocr_repo)
+
+from app.services.expense_split_service import ExpenseSplitService
+from app.services.settlement_service import SettlementService
+
+def get_expense_split_service(session: AsyncSession = Depends(get_db)) -> ExpenseSplitService:
+    return ExpenseSplitService(session)
+
+def get_settlement_service(session: AsyncSession = Depends(get_db)) -> SettlementService:
+    return SettlementService(session)
