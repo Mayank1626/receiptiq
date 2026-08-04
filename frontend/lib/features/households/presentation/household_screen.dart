@@ -16,7 +16,13 @@ class HouseholdScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Workspaces'),
+        title: const WorkspaceAppBarTitle(fallbackTitle: 'Households'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.file_download),
+            onPressed: () => context.push('/export'),
+          ),
+        ],
       ),
       body: ApiStateWidget<List<HouseholdModel>>(
         state: state.households,

@@ -13,6 +13,10 @@ import '../../features/splits/presentation/household_balances_screen.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/notifications/presentation/notification_settings_screen.dart';
+import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/profile/presentation/storage_screen.dart';
+import '../../features/profile/presentation/about_screen.dart';
+import '../../features/export/presentation/export_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authControllerProvider);
@@ -68,6 +72,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/notifications',
         builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/export',
+        builder: (context, state) => const ExportScreen(),
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: '/profile/storage',
+        builder: (context, state) => const StorageScreen(),
+      ),
+      GoRoute(
+        path: '/profile/about',
+        builder: (context, state) => const AboutScreen(),
       ),
       GoRoute(
         path: '/review/:id',

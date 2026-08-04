@@ -19,6 +19,12 @@ class HistoryScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const WorkspaceAppBarTitle(fallbackTitle: 'Receipt History'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.file_download),
+            onPressed: () => context.push('/export'),
+          ),
+        ],
       ),
       body: Column(
         children: [

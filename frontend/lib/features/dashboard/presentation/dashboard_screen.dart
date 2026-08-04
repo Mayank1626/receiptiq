@@ -27,6 +27,21 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dashboardState = ref.watch(dashboardControllerProvider);
+    final authState = ref.watch(authControllerProvider);
+
+    String initials = '?';
+    Color avatarColor = Colors.grey;
+
+    authState.maybeWhen(
+      authenticated: (user) {
+        if (user.fullName.isNotEmpty) {
+          initials = user.fullName.trim().split(RegExp(r'\s+')).take(2).map((s) => s[0].toUpperCase()).join('');
+        }
+        final colors = [Colors.blue, Colors.green, Colors.purple, Colors.orange, Colors.teal, Colors.pink];
+        avatarColor = colors[user.id.hashCode % colors.length];
+      },
+      orElse: () {},
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -37,10 +52,6 @@ class DashboardScreen extends ConsumerWidget {
               icon: const Icon(Icons.account_balance_wallet),
               onPressed: () => context.push('/households/balances'),
             ),
-          IconButton(
-            icon: const Icon(Icons.group),
-            onPressed: () => context.push('/households'),
-          ),
           Stack(
             alignment: Alignment.center,
             children: [
@@ -66,14 +77,18 @@ class DashboardScreen extends ConsumerWidget {
                 ),
             ],
           ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => context.push('/settings/notifications'),
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0, left: 8.0),
+            child: GestureDetector(
+              onTap: () => context.push('/profile'),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: avatarColor,
+                foregroundColor: Colors.white,
+                child: Text(initials, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+            ),
           ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => ref.read(authControllerProvider.notifier).logout(),
-          )
         ],
       ),
       body: ApiStateWidget<DashboardData>(
@@ -105,10 +120,24 @@ class DashboardScreen extends ConsumerWidget {
         const DashboardProcessingCard(),
         _buildSummaryCards(context, data),
         const SizedBox(height: 16),
-        FilledButton.tonalIcon(
-          onPressed: () => context.push('/analytics'),
-          icon: const Icon(Icons.analytics),
-          label: const Text('View Full Analytics'),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.tonalIcon(
+                onPressed: () => context.push('/analytics'),
+                icon: const Icon(Icons.analytics),
+                label: const Text('View Full Analytics'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => context.push('/export'),
+                icon: const Icon(Icons.file_download),
+                label: const Text('Export Reports'),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 24),
         if (data.pendingReviews.isNotEmpty) ...[

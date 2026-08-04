@@ -23,6 +23,12 @@ class AnalyticsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const WorkspaceAppBarTitle(fallbackTitle: 'Analytics'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.file_download),
+            onPressed: () => context.push('/export'),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: controller.refresh,
