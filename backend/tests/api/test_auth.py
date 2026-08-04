@@ -46,11 +46,12 @@ async def test_register(async_client, mock_auth_service):
 
 @pytest.mark.asyncio
 async def test_login(async_client, mock_auth_service):
-    from app.schemas.auth import TokenResponse
+    from app.schemas.auth import TokenResponse, UserRead
     mock_auth_service.login.return_value = TokenResponse(
         access_token="access_token",
         refresh_token="refresh_token",
-        token_type="bearer"
+        token_type="bearer",
+        user=UserRead(id=uuid.uuid4(), email="test@example.com", is_active=True, created_at=datetime.now(timezone.utc))
     )
     
     response = await async_client.post("/api/v1/auth/login", json={
@@ -61,6 +62,7 @@ async def test_login(async_client, mock_auth_service):
     assert response.status_code == 200
     assert response.json()["access_token"] == "access_token"
     assert response.json()["token_type"] == "bearer"
+    assert response.json()["user"]["email"] == "test@example.com"
 
 @pytest.mark.asyncio
 async def test_me(async_client, mock_auth_service):
